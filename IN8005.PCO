@@ -1,0 +1,903 @@
+
+      ****************************************************************** 
+      *   (C) COPYRIGHT FINANCIAL NETWORK SERVICES PTY LTD. 1982       *
+      *       ALL RIGHTS RESERVED. NO PART OF THIS PROGRAM MAY         *
+      *       BE PHOTOCOPIED, REPRODUCED, TRANSLATED TO ANOTHER        *
+      *       PROGRAM LANGUAGE OR USED IN ANY WAY WITHOUT THE          *
+      *       PRIOR WRITTEN CONSENT OF FINANCIAL NETWORK SERVICES      *
+      *       OR THE AUTHORISED SELLING AGENT.                         *
+      *----------------------------------------------------------------*
+      *             FINANCIAL NETWORK SERVICES PTY LTD.                *
+      *               UNIT 6, 70 ROSEHILL STREET, REDFERN 2016         *
+      *                   SYDNEY, AUSTRALIA.                           *
+      *                     TEL. 318-1088                              *
+      ******************************************************************
+      ******************************************************************
+      ******************************************************************
+      ***                                                            ***
+      ***  SYSTEM:-  DEPOSITS                                        ***
+      ***                                                            ***
+      ***  PROGRAM:- IN8005                                          ***
+      ***                                                            ***
+      ***  PURPOSE:- CREATE D03 EXTRACT OFFICIAL BANK                ***
+      ******************************************************************
+      *                                                              ***
+      *                                                              ***
+      *                 P R O G R A M    H I S T O R Y               ***
+      *  PROGRAMMERS INITIALS TOGETHER WITH THE "SPR" NUMBER MUST BE ***
+      *  REFLECTED IN COLUMNS 73-80 OF EVERY LINE/S CHANGED OR ADDED.***
+      *                                                              ***
+      * PROGRAMMER : JOHN CALDERON.                                          ***
+      * DATE :       18\06\2015                                      ***
+      * SPR NO.:                                                     ***
+      *------------:------:-------:-------------------------------------
+      * PROGRAMMER :  H48131 JOHN CALDERON.           
+      * DATE :       18\06\2015
+      * OBJETIVO :   REPORTE D03 EXTRUCTURA CAMBIOS 	  
+      *----------------------------------------------------------------*
+
+       IDENTIFICATION DIVISION.
+      *TO CREATE D03 EXTRACT OFFICIAL BANK
+       ENVIRONMENT DIVISION.
+
+       INPUT-OUTPUT SECTION.
+       FILE-CONTROL.
+       SELECT OUTPUT-FILE ASSIGN TO "D03"
+                          ORGANIZATION LINE SEQUENTIAL
+                          FILE STATUS IS OUT-STAT.
+       SELECT HEADER-FILE  ASSIGN TO "HEADER"
+                          ORGANIZATION LINE SEQUENTIAL
+                          FILE STATUS IS HEADER-STAT.
+
+       DATA DIVISION.
+
+       FILE SECTION.
+
+       FD  OUTPUT-FILE.
+       01  OUTPUT-FILE-RECORD                   PIC X(84).
+
+       FD  HEADER-FILE.
+       01  HEADER-FILE-RECORD                   PIC X(26).
+
+       WORKING-STORAGE SECTION.
+
+       01  OUTPUT-FILE-REC.                                     
+           03 WA-TP-ID-PER-JUD                  PIC X(1).
+           03 FILLER                            PIC X(1) VALUE X"09".
+           03 WA-NUM-ID-PER-JUD                 PIC X(13).
+           03 FILLER                            PIC X(1) VALUE X"09".
+           03 WA-COD-SUB-CUENTA                 PIC X(6).
+           03 FILLER                            PIC X(1) VALUE X"09".
+           03 WA-CUENTA-1                       PIC Z(06)9(10).
+           03 FILLER                            PIC X(1) VALUE X"09".
+           03 WA-SALDO                          PIC Z(12)9.99.
+           03 FILLER                            PIC X(1) VALUE X"09".
+           03 WA-ESTADO                         PIC Z9.
+           03 FILLER                            PIC X(1) VALUE X"09".
+           03 WA-RUC-CONST-PUBLI                PIC X(24).
+
+       01  HEADER-FILE-REC.                                      
+           03 CODIGO-ESTRUA                     PIC X(03).
+           03 FILLER                            PIC X(1) VALUE X"09".
+           03 CODIGO-ETDAD                      PIC 9(04).
+           03 FILLER                            PIC X(1) VALUE X"09".
+           03 FEC-CORTE                         PIC X(10).
+           03 FILLER                            PIC X(1) VALUE X"09".
+           03 NUM-TOTREGS                       PIC Z(6).
+
+       01  UT0310CA-AREA.
+           COPY UT0310CA  IN LIBRYMIS.
+
+           COPY UT1999CA  IN LIBRYMIS.
+           COPY DBIOORAST IN LIBRYMIS.
+           COPY DBIOCALL  IN LIBRYMIS.
+           COPY UT8500CA  IN LIBRYMIS.
+           COPY UT0020CA  IN LIBRYMIS.
+           COPY MISERR01  IN LIBRYMIS.
+           COPY UT0030CA  IN LIBRYMIS.
+           COPY UT0025CA  IN LIBRYMIS.
+       01  UT7500CA-FUNCTION-AREA.
+           COPY UT7500CA IN LIBRYTRE.
+       01  WA-BOSD-AREA.
+           COPY BOSDMAST IN LIBRYMIS.
+       01  WA-BOD2-AREA.           
+           COPY BOD2MAST  IN LIBRYMIS.		   
+
+       01  WA-TODAYS-BIN-DATE                  PIC S9(9) BINARY.
+       01  WA-CUENTA                           PIC X(16).
+       01  WA-STRT-OF-MONTH                    PIC S9(9) BINARY.
+       01  WA-END-OF-MONTH                     PIC S9(9) BINARY.
+       01  WA-TODAYS-DATE.
+           03  WA-TODAYS-CCYY-R                PIC 9(4).
+	   03  FILLER REDEFINES WA-TODAYS-CCYY-R.
+               05 WA-TODAYS-CC                 PIC 99.
+               05 WA-TODAYS-YY                 PIC 99.
+           03  WA-TODAYS-MM                    PIC 99.
+           03  WA-TODAYS-DD                    PIC 99.
+
+       01  WS-FECHA-CORTE.  
+           03  WS-FECHA-CORTE-DD               PIC 99.
+           03  WS-FILLER-1                     PIC X  VALUE "/".
+           03  WS-FECHA-CORTE-MM               PIC 99.
+           03  WS-FILLER-1                     PIC X  VALUE "/".
+           03  WS-FECHA-CORTE-CC               PIC 99.
+           03  WS-FECHA-CORTE-YY               PIC 99.
+
+       01  WS-FECHA-TEMP.   
+           03  WS-FECHA-TEMP-DD                PIC 99.
+           03  WS-FILLER-1                     PIC X  VALUE "/".
+           03  WS-FECHA-TEMP-MM                PIC 99.
+           03  WS-FILLER-1                     PIC X  VALUE "/".
+           03  WS-FECHA-TEMP-CC                PIC 99.
+           03  WS-FECHA-TEMP-YY                PIC 99.
+    
+       01  WS-FECHA-TEMP-1.   
+           03  WS-FECHA-TEMP-DD-1              PIC 99.
+           03  WS-FECHA-TEMP-MM-1              PIC 99.
+           03  WS-FECHA-TEMP-CC-1              PIC 99.
+           03  WS-FECHA-TEMP-YY-1              PIC 99.
+
+       01  WA-COUNT             PIC 9(10) VALUE ZERO.
+       01  WS-TOT-AMT           PIC 9(14)V9(3) VALUE ZERO.
+       01  WS-CTA-CTE-IFI       PIC 9(8)  VALUE 01600022.
+       01  WS-REPORT-NO         PIC 9(3)  VALUE 001. 
+       01  WS-REPORT-TYPE       PIC X(1)  VALUE "N".
+       01  WS-INPUT             PIC X(24).
+
+       01  WA-INPUT-DATA.
+           03 WA-REFER-NO           PIC X(08).
+	   03 WA-DATE-FRM           PIC X(08).
+           03 WA-DATE-FRM-9 REDEFINES WA-DATE-FRM.
+	       05 WA-DATE-FRM-DD    PIC 99.
+	       05 WA-DATE-FRM-MM    PIC 99.
+	       05 WA-DATE-FRM-CCYY  PIC 9(04).
+	   03 WA-DATE-TO            PIC X(08).
+           03 WA-DATE-TO-9 REDEFINES WA-DATE-TO. 
+	       05 WA-DATE-TO-DD     PIC 99.
+	       05 WA-DATE-TO-MM     PIC 99.
+	       05 WA-DATE-TO-CCYY   PIC 9(04).
+      * 01 WA-TODAY-BINARY-DATE  PIC S9(9) COMP VALUE 0.
+       01 WA-TODAY-BINARY-DATE  PIC 9(2).
+       01 WS-SIGN-FR-DT         PIC X(10).
+       01 TODAY-DATE            PIC X(10).
+       01 WA-TEMP-DATE.
+          03 WA-TEMP-DATE-DD    PIC 99.
+          03 WA-TEMP-DATE-MM    PIC 99.
+          03 WA-TEMP-DATE-CC    PIC 99.
+          03 WA-TEMP-DATE-YY    PIC 99.
+       01 WA-TEMP-DATE-R2.
+          03 WA-TEMP-CC-R2      PIC 99.
+          03 WA-TEMP-YY-R2      PIC 99.
+          03 FILLER             PIC X VALUE "-".
+          03 WA-TEMP-MM-R2      PIC 99.
+          03 FILLER             PIC X VALUE "-".
+          03 WA-TEMP-DD-R2      PIC 99.		   
+
+           EXEC SQL BEGIN DECLARE SECTION END-EXEC.
+
+       01  ORACLE-ID            PIC X VALUE "/".
+       01  SELECT-STR01         PIC X(2048) VALUES SPACES.
+       01  START-BATCH-TANDEM   PIC X.
+       
+       01  WS-REG-TRABAJO.
+           03 D-JRN-NO          PIC 9(09)   VALUE 0.
+       
+
+       01  D-D03.
+           03 D-TRAN-DATE       PIC 9(09).
+           03 D-ID-TYPE         PIC X(04).
+           03 D-STATUS-REG      PIC X(02).
+           03 D-OBSERVACION     PIC X(60).
+           03 D-TELL-NO         PIC X(16).
+           03 D-TELL-UPD-NO	    PIC X(16).
+           03 D-DATE-IN         PIC 9(09).
+           03 D-DATE-UPD	    PIC 9(09).
+           03 D-ID-NUMBER       PIC X(24).
+           03 D-SUB-CTA-CONT    PIC X(06).
+           03 D-ACCOUNT-NO      PIC X(16).
+           03 D-TIP-REG         PIC X(06).
+           03 TIPO-REGISTRO     PIC X(06).  		   
+           03 D-AMT-EFECZ       PIC S9(14)V9(3).          
+           03 D-AMT-TOTAL       PIC S9(14)V9(3).
+           03 ACCOUNT-STAT      PIC X(02).		   
+           03 D-ACT-STAT        PIC X(02).
+           03 D-ID-FID          PIC X(24).
+       01  WA-BIN-DATE1         PIC 9(5).
+       01  WA-BIN-DATE2         PIC 9(5).
+       01  WA-FEC-DEPO          PIC X(8).
+       01  WA-BOD5.
+           03 D5-ID-NUMBER       PIC X(24).
+           03 D5-SUB-CTA-CONT    PIC X(06).
+           03 D5-ACCOUNT-NO      PIC X(16).	   
+       01  WA-BOD2.
+           03 D2-TRAN-DATE       PIC 9(09).
+           03 D2-ID-TYPE         PIC X(04).
+           03 D2-ID-NUMBER       PIC X(24).
+           03 D2-STATUS-REG      PIC X(02).
+           03 D2-OBSERVACION     PIC X(60).
+           03 D2-TELL-NO         PIC X(16).
+           03 D2-TELL-UPD-NO	 PIC X(16).
+           03 D2-DATE-IN         PIC 9(09).
+           03 D2-DATE-UPD	     PIC 9(09).
+           03 D2-SUB-CTA-CONT    PIC X(06).
+           03 D2-ACCT-NO         PIC X(16).
+           03 D2-ACT-STAT        PIC X(02).
+           03 D2-JRN-NO          PIC 9(09)   VALUE 0.
+           03 D2-ID-FID          PIC X(24).
+           03 D2-AMT-TOTAL       PIC S9(17)V9(3).
+       01 WA-BOD3.
+           03 D3-ID-NUMBER       PIC X(24).
+           03 D3-SUB-CTA-CONT    PIC X(06).
+           03 D3-ACCT-NO         PIC X(16).
+           03 D3-ACT-STAT        PIC X(02).
+           03 D4-SUB-CTA-CONT    PIC X(04).
+           03 SALDO-BOSD        PIC 9(14)V9(3).
+           03 AMT-EFECZ         PIC 9(14)V9(3).
+           03 AMOUNT-TOTAL      PIC 9(14)V9(3).
+           03 AMT-CHEQ          PIC 9(14)V9(3).
+           03 AMT-RETEN         PIC 9(14)V9(3).		   
+       01  WA-DATA-END          PIC X(1).
+       01  WA-DATA-END2         PIC X(1). 
+       01  WA-CLOSE-LOOP        PIC X(1).
+       01  WA-CLOSE-LOOP2       PIC X(1). 
+       01  WA-COUNT-DEL         PIC 9(10) VALUE ZERO.
+	   01  WA-COUNT-DEL-2       PIC 9(10) VALUE ZERO.
+       01  WA-COUNT-SALDO       PIC 9(10) VALUE ZERO.	   
+       01  WA-DATA-END-S        PIC X(1).
+       01  WA-DATA-END2-S       PIC X(1). 
+       01  WA-CLOSE-LOOP-S      PIC X(1).
+       01  WA-CLOSE-LOOP2-S     PIC X(1).
+       01  WA-DATA-END-A        PIC X(1).
+       01  WA-DATA-END2-A       PIC X(1). 
+       01  WA-CLOSE-LOOP-A      PIC X(1).
+       01  WA-CLOSE-LOOP2-A     PIC X(1).
+       01  WA-DATA-END4         PIC X(1).
+       01  WA-DATA-END24        PIC X(1). 
+       01  WA-CLOSE-LOOP4       PIC X(1).
+       01  WA-CLOSE-LOOP24       PIC X(1).  	   
+       01  WA-COUNT-DEL-S       PIC 9(10) VALUE ZERO.
+       01  WA-COUNT-WRF         PIC 9(10) VALUE ZERO.   	   
+
+           EXEC SQL END DECLARE SECTION END-EXEC.
+
+           EXEC SQL INCLUDE SQLCA END-EXEC.
+
+       01  FILE-STATS.
+           03 OUT-STAT          PIC 99 VALUE ZEROS.
+           03 HEADER-STAT        PIC 99 VALUE ZEROS.
+           03 FINAL1-STAT       PIC 99 VALUE ZEROS.
+
+      **********************************************************
+       PROCEDURE DIVISION.
+      **********************************************************
+H48131     PERFORM VALIDATION-DATE THRU EXIT-DATE.
+           MOVE ZEROES              TO SQLCODE.
+           INITIALIZE WA-COUNT.
+           ADD  1                   TO WA-COUNT.
+           MOVE 0                   TO UT1999CA-CALL-CODE.
+           ACCEPT WS-INPUT FROM COMMAND-LINE.
+	   MOVE WS-INPUT            TO WA-INPUT-DATA.
+           INITIALIZE                  HEADER-FILE-REC.
+
+           CALL "UT1999" USING UT1999CA-CALL-AREA.
+
+	   CALL "DBIO".
+           DISPLAY "JOB IN8005 RUN DATE : " UT1999CA-CCYYMMDD
+***********POPULATE END OF MONTH DATE*************
+           MOVE 01                  TO UT0025-CALL-DDMMCCYY-DD
+           MOVE WA-DATE-FRM-MM      TO UT0025-CALL-DDMMCCYY-MM
+           MOVE WA-DATE-FRM-CCYY    TO UT0025-CALL-DDMMCCYY-CCYY
+           MOVE 5                   TO UT0025-CALL-CODE
+           CALL "UT0025" USING         UT0025-CALL-AREA
+                                       UT0025-RETURN-AREA.
+           MOVE UT0025-RETURN-DDMMCCYY 
+                                    TO WS-FECHA-TEMP-1. 
+
+           MOVE WS-FECHA-TEMP-DD-1  TO WS-FECHA-CORTE-DD. 
+           MOVE WS-FECHA-TEMP-MM-1  TO WS-FECHA-CORTE-MM.
+           MOVE WS-FECHA-TEMP-CC-1  TO WS-FECHA-CORTE-CC.
+           MOVE WS-FECHA-TEMP-YY-1  TO WS-FECHA-CORTE-YY.
+      ******POPULATE START AND END OF PROCESS DATES***********
+           MOVE 1                  TO UT0030-FUNCTION.
+           MOVE WA-DATE-FRM-DD     TO UT0025-CALL-DDMMCCYY-DD
+           MOVE WA-DATE-FRM-MM     TO UT0025-CALL-DDMMCCYY-MM
+           MOVE WA-DATE-FRM-CCYY   TO UT0025-CALL-DDMMCCYY-CCYY
+           MOVE UT0025-CALL-DDMMCCYY-X 
+	                           TO UT0030-DATE-AREA.
+           CALL "UT0030" USING        UT0030-FUNCTION
+                                      UT0030-DATE-AREA
+                                      UT0030-BINARY-DATE.
+           MOVE UT0030-BINARY-DATE TO WA-STRT-OF-MONTH. 
+
+           MOVE 1                  TO UT0030-FUNCTION.
+           MOVE WA-DATE-TO-DD      TO UT0025-CALL-DDMMCCYY-DD
+           MOVE WA-DATE-TO-MM      TO UT0025-CALL-DDMMCCYY-MM
+           MOVE WA-DATE-TO-CCYY    TO UT0025-CALL-DDMMCCYY-CCYY
+           MOVE UT0025-CALL-DDMMCCYY-X 
+	                           TO UT0030-DATE-AREA.
+           CALL "UT0030" USING        UT0030-FUNCTION
+                                      UT0030-DATE-AREA
+                                      UT0030-BINARY-DATE.
+           MOVE UT0030-BINARY-DATE TO WA-END-OF-MONTH.  
+ 
+      *****POPULATE HEADER VALUES*****                            
+           MOVE WS-FECHA-CORTE      TO FEC-CORTE.      
+           MOVE 'D03'               TO CODIGO-ESTRUA.          
+           MOVE 1029                TO CODIGO-ETDAD.           
+      ********************************                       
+           MOVE 95                  TO DBIO-CALL-FUNC.
+           CALL "DBIO" USING           DBIO-CALL-PARAM
+                                       DBIO-CALL-SYS-AREA
+                                       DBIO-CALL-KEY-AREA
+                                       DBIO-CALL-STATUS.
+
+           IF DBIO-CALL-STATUS = "****"
+              DISPLAY "IN8005:(0000) GOOD DB SIGNON"
+           ELSE
+              DISPLAY "IN8005:(0000) OPEN DB ERROR "
+	      DISPLAY "SQLCODE:" SQLCODE
+           END-IF.
+      *******RETRIVE DATA FROM BOD3 ESTRUCTURA**********            
+            EXEC SQL
+                 DECLARE D3_ESTRUCT CURSOR FOR
+                 SELECT ID_NUMBER,   
+                        SUB_CTA_CONT,
+                        ACCT_NO    
+                  FROM  BOD3 A
+                 WHERE  A.SOC_NO='003'
+                   AND  A.TRAN_DATE BETWEEN :WA-STRT-OF-MONTH
+                   AND :WA-END-OF-MONTH 
+            END-EXEC
+      *************OPEN CURSOR D3*************
+            EXEC SQL
+              OPEN D3_ESTRUCT
+            END-EXEC.
+           IF SQLCODE NOT = 0
+              DISPLAY 'ERROR IN D2_ESTRUC CURSOR OPEN: ' SQLCODE
+              PERFORM ERROR-PARA. 
+      
+
+      **********************************************************
+           MOVE ZEROES TO SQLCODE
+
+      *******RETRIVE DATA FROM BOSP**********
+           EXEC SQL
+                DECLARE D03 CURSOR FOR
+                SELECT ID_NUMBER,
+                       ACT_STAT,
+                       SUB_CTA_CONT,
+                       ACCT_NO,
+                       JRN_NO,
+                       AMT_TOTAL,                       
+                       ID_FID,
+                       STATUS_REG   
+                FROM   BOD3 A
+                WHERE  A.SOC_NO='003'
+                  AND  A.STATUS_REG ='00'
+                  AND  A.SUB_CTA_CONT <> '0'
+                  GROUP BY ID_NUMBER, SUB_CTA_CONT, ACCT_NO,
+                        JRN_NO,AMT_TOTAL, ACT_STAT, ID_FID, STATUS_REG
+                  ORDER BY SUB_CTA_CONT, ACCT_NO
+           END-EXEC.
+            
+           OPEN OUTPUT OUTPUT-FILE.
+           IF OUT-STAT NOT = ZERO
+              DISPLAY "(IN8005): ERROR OPENING OUTPUT FILE"
+              SET MISERR01-FATAL-ERROR-FOUND TO TRUE
+              GO TO PROGRAM-EXIT.
+
+      *************OPEN CURSOR D03*************
+            EXEC SQL
+              OPEN D03
+            END-EXEC.
+           IF SQLCODE NOT = 0
+              DISPLAY 'ERROR IN OPENING CURSOR D03: ' SQLCODE
+             PERFORM ERROR-PARA.
+      ******************************************
+
+            EXEC SQL
+               DECLARE D02 CURSOR FOR
+                 SELECT 
+                        TRAN_DATE,
+                        ID_TYPE,
+                        ID_NUMBER,
+                        SUB_CTA_CONT,
+                        ACCT_NO,
+                        JRN_NO,
+                        ACT_STAT,
+                        ID_FID,
+                        STATUS_REG,
+                        OBSERVACION,
+                        TELL_NO,
+                        TELL_UPD_NO,
+                        DATE_IN,
+                        DATE_UPD
+                  FROM  BOD2 A
+                  WHERE A.SOC_NO = '003'
+                    AND A.TRAN_DATE BETWEEN :WA-STRT-OF-MONTH
+                    AND :WA-END-OF-MONTH 
+                    AND A.STATUS_REG = '00'
+                    AND A.SUB_CTA_CONT <> '0'
+      
+                    GROUP BY TRAN_DATE,
+                        ID_TYPE,
+                        ID_NUMBER,
+                        SUB_CTA_CONT,
+                        ACCT_NO,
+                        JRN_NO,
+                        ACT_STAT,
+                        ID_FID,
+                        STATUS_REG,
+                        OBSERVACION,
+                        TELL_NO,
+                        TELL_UPD_NO,
+                        DATE_IN,
+                        DATE_UPD 
+            END-EXEC
+      *************OPEN CURSOR D02*************
+            EXEC SQL
+              OPEN D02
+            END-EXEC.
+           IF SQLCODE NOT = 0
+              DISPLAY 'ERROR IN D02 CURSOR OPEN: ' SQLCODE
+              PERFORM ERROR-PARA.
+      *******************************************
+  
+            EXEC SQL
+               DECLARE SALDO CURSOR FOR
+                 SELECT ID_NUMBER,
+                        ACCT_NO,
+                        SUB_CTA_CONT,
+                        ACT_STAT
+                  FROM  BOD3 A
+                  WHERE A.SOC_NO = '003'
+                    AND A.STATUS_REG = '00'
+                    AND A.SUB_CTA_CONT <> '0'      
+            END-EXEC
+			
+
+
+
+           MOVE 'N'                  TO WA-DATA-END
+                                        WA-DATA-END2
+                                        WA-CLOSE-LOOP
+                                        WA-CLOSE-LOOP2.
+           MOVE 'N'                  TO WA-DATA-END-S
+                                        WA-DATA-END2-S
+                                        WA-CLOSE-LOOP-S
+                                        WA-CLOSE-LOOP2-S.
+           MOVE 'N'                  TO WA-DATA-END-A
+                                        WA-DATA-END2-A
+                                        WA-CLOSE-LOOP-A
+                                        WA-CLOSE-LOOP2-A.
+           MOVE 'N'                  TO WA-DATA-END4
+                                        WA-DATA-END24
+                                        WA-CLOSE-LOOP4
+                                        WA-CLOSE-LOOP24
+
+      *    FECHA MAYOR QUE 28022015
+           IF WA-DATE-TO-MM >= WA-TODAY-BINARY-DATE THEN
+              PERFORM DELETE-BOD3   THRU DELETE-BOD3-END 
+                                         UNTIL WA-CLOSE-LOOP24 = 'Y'
+                                            OR WA-DATA-END4 = 'Y'
+              EXEC SQL CLOSE D3_ESTRUCT END-EXEC
+              PERFORM PROG-COMMIT   THRU COMMIT-EXIT                                            
+           END-IF.
+      *     INITIALIZE WA-BOD2.
+            PERFORM READ-CURSOR-D2-ESTRUCT THRU D2-ESTRUCT-EXIT
+            UNTIL WA-DATA-END2 = 'Y'.
+            PERFORM PROG-COMMIT   THRU COMMIT-EXIT.
+            EXEC SQL CLOSE D02 END-EXEC.
+      *************OPEN CURSOR SALDO*************
+            EXEC SQL
+              OPEN SALDO
+            END-EXEC.
+           IF SQLCODE NOT = 0
+              DISPLAY 'ERROR IN SALDO CURSOR OPEN: ' SQLCODE
+              PERFORM ERROR-PARA.
+      *******************************************			
+            PERFORM ACTUALIZA-SALDO THRU ACTUALIZA-SALDO-EXIT
+             UNTIL WA-DATA-END2-A = 'Y'.
+            PERFORM PROG-COMMIT   THRU COMMIT-EXIT.
+            EXEC SQL CLOSE SALDO END-EXEC.
+      *************OPEN CURSOR D03*************
+            EXEC SQL
+              OPEN D03
+            END-EXEC.
+           IF SQLCODE NOT = 0
+              DISPLAY 'ERROR IN OPENING CURSOR D03: ' SQLCODE
+              PERFORM ERROR-PARA.
+      ******************************************			
+            PERFORM READ-PARA-START THRU READ-PARA-END.
+              MOVE WA-COUNT             TO NUM-TOTREGS.         
+
+           OPEN OUTPUT HEADER-FILE.
+           IF HEADER-STAT NOT = ZERO
+              DISPLAY "(IN8005): ERROR OPENING FINAL HEADER FILE"
+              SET MISERR01-FATAL-ERROR-FOUND TO TRUE
+              GO TO PROGRAM-EXIT.
+
+           WRITE HEADER-FILE-RECORD FROM HEADER-FILE-REC.
+           CLOSE HEADER-FILE.
+	   
+           PROGRAM-EXIT.
+           MOVE 91 TO DBIO-CALL-FUNC.
+           CALL "DBIO" USING DBIO-CALL-PARAM
+                             DBIO-CALL-SYS-AREA
+                             DBIO-CALL-KEY-AREA
+                             DBIO-CALL-STATUS.
+
+           IF DBIO-CALL-STATUS = "****"
+                DISPLAY "IN8005:(SIGN-OFF) GOOD DB SIGNOFF"
+           ELSE
+                DISPLAY "IN8005:(SIGN-OFF) OPEN ERROR - "
+           END-IF.
+
+           EXIT.
+           COPY MISERR02 IN LIBRYMIS.
+           STOP RUN.
+       DELETE-BOD3.
+       INITIALIZE WA-BOD5.
+       PERFORM READ-CURSOR-D3-ESTRUCT THRU D3-ESTRUCT-EXIT
+        UNTIL WA-DATA-END24 = 'Y'. 
+     
+       DELETE-BOD3-END.
+              EXIT.			   
+
+        READ-CURSOR-D2-ESTRUCT.
+           EXEC SQL
+           FETCH D02
+                 INTO :D2-TRAN-DATE,
+                       D2-ID-TYPE,
+                       D2-ID-NUMBER,
+                       D2-SUB-CTA-CONT,
+                       D2-ACCT-NO,
+                       D2-JRN-NO,
+                       D2-ACT-STAT,
+                       D2-ID-FID,
+                       D2-STATUS-REG,
+                       D2-OBSERVACION,
+                       D2-TELL-NO, 
+                       D2-TELL-UPD-NO,
+                       D2-DATE-IN,
+                       D2-DATE-UPD
+    
+           END-EXEC.
+           DISPLAY 'SQLCODE READ-CURSOR-D2-ESTRUCT:' 
+                    SQLCODE '*' D2-ACCT-NO '*'
+           IF SQLCODE NOT = 0
+              IF SQLCODE = 1403
+                 MOVE 'Y' TO WA-DATA-END2
+                             WA-CLOSE-LOOP2
+              ELSE
+              DISPLAY 'ERROR IN CURSOR-D2-ESTRUCT FECHT: ' SQLCODE
+              PERFORM ERROR-PARA
+              END-IF
+                
+           ELSE
+              DISPLAY D2-ACCT-NO    
+           EXEC SQL
+              INSERT INTO BOD3
+                   VALUES (
+                       '003', 
+                       :D2-TRAN-DATE,
+                       :D2-ID-TYPE,
+                       :D2-ID-NUMBER,
+                       :D2-SUB-CTA-CONT,
+                       :D2-ACCT-NO,
+                       :D2-JRN-NO,
+                       :D2-ACT-STAT,
+                       0,
+                       :D2-ID-FID,
+                       :D2-STATUS-REG,
+                       :D2-OBSERVACION,
+                       :D2-TELL-NO, 
+                       :D2-TELL-UPD-NO,
+                       :D2-DATE-IN,
+                       :D2-DATE-UPD                 
+                       ) 
+
+           END-EXEC
+           EXEC SQL        
+                UPDATE BOD3 SET  AMT_TOTAL = 0 WHERE 
+                SUB_CTA_CONT NOT LIKE '210130'
+           END-EXEC
+              DISPLAY 'SQLCODE INSERT:' 
+                    SQLCODE '*' D2-ACCT-NO '*'
+              DISPLAY D2-ACCT-NO            
+              IF SQLCODE = 0 OR 1403
+                 ADD 1 TO WA-COUNT-DEL
+              ELSE
+                DISPLAY "IN8004() PROBLEM IN INSERTING BOD3: " 
+                       SQLCODE '*' D2-ACCT-NO '*' D2-JRN-NO '*'
+              END-IF
+
+          END-IF.
+       D2-ESTRUCT-EXIT.
+       EXIT.
+       ACTUALIZA-SALDO.
+           EXEC SQL
+           FETCH SALDO
+                 INTO :D3-ID-NUMBER,
+                       D3-ACCT-NO,
+                       D3-SUB-CTA-CONT,
+                       D3-ACT-STAT
+           END-EXEC.
+           IF SQLCODE NOT = 0
+              IF SQLCODE = 1403
+                 MOVE 'Y' TO WA-DATA-END2-A
+                             WA-CLOSE-LOOP2-A
+              ELSE
+              DISPLAY 'ERROR IN CURSOR-D2-SALDO FECHT: ' SQLCODE
+              PERFORM ERROR-PARA
+              END-IF
+           ELSE 
+           MOVE D3-SUB-CTA-CONT(1:4) TO D4-SUB-CTA-CONT
+           EXEC SQL   
+H48131       SELECT B.TIP_REG,
+H48131       SUM(AMT_CHEQ),
+H48131       SUM(AMT_RETEN),
+H48131       SUM(B.AMT_TOTAL),
+             B.ACT_STAT INTO
+H48131       :TIPO-REGISTRO,:AMT-CHEQ,:AMT-RETEN,:AMOUNT-TOTAL,
+             :ACCOUNT-STAT
+H48131       FROM BOSD B WHERE B.SOC_NO = '003' AND
+H48131       B.ID_NUMBER =:D3-ID-NUMBER AND 
+H48131       B.ACCT_NO =:D3-ACCT-NO
+H48131       AND  B.STATUS_REG ='00'
+H48131       AND substr(B.SUB_CTA_CONT,1,4) =:D4-SUB-CTA-CONT 
+H48131       AND B.TRAN_DATE BETWEEN :WA-STRT-OF-MONTH
+H48131       AND :WA-END-OF-MONTH
+H48131       GROUP BY B.TIP_REG, B.ACT_STAT 
+           END-EXEC
+		   
+        EVALUATE ACCOUNT-STAT
+           WHEN '00'
+                 MOVE '01' TO ACCOUNT-STAT
+           WHEN '65'
+                 MOVE '04' TO ACCOUNT-STAT
+           WHEN '88'
+                 MOVE '04' TO ACCOUNT-STAT
+           WHEN '06'
+                 MOVE '04' TO ACCOUNT-STAT
+           WHEN '07'
+                 MOVE '04' TO ACCOUNT-STAT
+           WHEN '01'
+                 MOVE '02' TO ACCOUNT-STAT
+           WHEN '03'
+                 MOVE '02' TO ACCOUNT-STAT
+           WHEN '02'
+                 MOVE '02' TO ACCOUNT-STAT
+           WHEN '99'
+                 MOVE '01' TO ACCOUNT-STAT 
+        END-EVALUATE
+               IF SQLCODE = 1403
+               PERFORM NOT-FOUND-VALIDATION THRU NOT-FOUND-EXIT
+               PERFORM PROG-COMMIT   THRU COMMIT-EXIT 
+               ELSE
+                IF TIPO-REGISTRO = '1DISP'
+        COMPUTE D-AMT-EFECZ = (AMOUNT-TOTAL - AMT-CHEQ - AMT-RETEN)
+                MOVE D-AMT-EFECZ TO SALDO-BOSD
+                ELSE
+                MOVE AMOUNT-TOTAL TO SALDO-BOSD  
+                END-IF				
+               EXEC SQL        
+               UPDATE BOD3 A SET A.AMT_TOTAL =:SALDO-BOSD,
+			                     A.ACT_STAT =:ACCOUNT-STAT
+               WHERE A.ID_NUMBER =:D3-ID-NUMBER
+               AND A.ACCT_NO =:D3-ACCT-NO AND 
+               substr(A.SUB_CTA_CONT,1,4) =:D4-SUB-CTA-CONT
+               END-EXEC
+             INITIALIZE WA-BOD3   
+              DISPLAY 'SQLCODE UPDATE:' 
+                    SQLCODE '*' D3-ACCT-NO '*'
+              END-IF
+              IF SQLCODE = 0 OR 1403
+                 ADD 1 TO WA-COUNT-SALDO
+              ELSE
+                DISPLAY "IN8004() PROBLEM IN UPDATING SALDO : " 
+                       SQLCODE '*' D3-ACCT-NO '*'
+              END-IF
+          END-IF.
+       ACTUALIZA-SALDO-EXIT.
+       EXIT.   
+       READ-PARA-START.
+           INITIALIZE  D-D03 D-JRN-NO.
+           INITIALIZE  OUTPUT-FILE-REC.  
+
+           EXEC SQL
+           FETCH D03
+                 INTO : D-ID-NUMBER,
+                        D-ACT-STAT,
+                        D-SUB-CTA-CONT,
+                        D-ACCOUNT-NO,
+                        D-JRN-NO,
+                        D-AMT-TOTAL,
+                        D-ID-FID,
+                        D-STATUS-REG
+           END-EXEC.
+           IF SQLCODE NOT = 0
+              IF SQLCODE = 1403
+                 GO TO READ-PARA-END
+              END-IF
+              DISPLAY 'ERROR IN D03 CURSOR FETCH: ' SQLCODE
+              PERFORM ERROR-PARA
+           END-IF.
+H48131*   IF D-ACT-STAT = '00' OR '04' THEN 
+           IF D-STATUS-REG = '00'  THEN 
+           NEXT SENTENCE 
+            ELSE    
+           GO TO READ-PARA-START
+           END-IF.
+           MOVE "R"                 TO WA-TP-ID-PER-JUD.        
+           MOVE D-ID-NUMBER(1:13)   TO WA-NUM-ID-PER-JUD.
+
+	   MOVE SPACES              TO WA-RUC-CONST-PUBLI
+	   IF D-ID-FID NOT = SPACES
+	      MOVE D-ID-FID         TO WA-RUC-CONST-PUBLI
+           ELSE
+	      MOVE '0'              TO WA-RUC-CONST-PUBLI(23:1) 
+           END-IF 
+
+	   IF D-SUB-CTA-CONT(1:4) = '2303'
+	      MOVE D-SUB-CTA-CONT(1:4) 
+	                            TO WA-COD-SUB-CUENTA
+           ELSE
+	      MOVE D-SUB-CTA-CONT   TO WA-COD-SUB-CUENTA 
+           END-IF
+
+	   MOVE D-ACCOUNT-NO        TO WA-CUENTA           
+	   MOVE WA-CUENTA           TO WA-CUENTA-1
+	   
+      * 	   IF D-SUB-CTA-CONT(1:6) = '210130'
+      * 	      MOVE D-JRN-NO TO WA-CUENTA-1 
+      * 	   END-IF.
+	   
+	       MOVE D-AMT-TOTAL         TO WA-SALDO
+           MOVE D-ACT-STAT          TO WA-ESTADO.
+           WRITE OUTPUT-FILE-RECORD FROM OUTPUT-FILE-REC 
+           ADD 1                    TO WA-COUNT 
+           GO TO READ-PARA-START.
+       READ-PARA-END.
+            CLOSE OUTPUT-FILE.
+            DISPLAY WA-COUNT " RECORDS WRITTEN.".
+            EXEC SQL CLOSE D03 END-EXEC.
+       EXIT.
+H48131  NOT-FOUND-VALIDATION.
+H48131  IF (D3-SUB-CTA-CONT = '2103  ' OR '2105  ' OR '210140')
+H48131  AND D3-ACT-STAT = '01' THEN
+H48131     EXEC SQL
+H48131     UPDATE BOD3 SET ACT_STAT = '04' WHERE
+H48131     ID_NUMBER =:D3-ID-NUMBER AND
+H48131     ACCT_NO =:D3-ACCT-NO
+H48131     AND SUB_CTA_CONT =:D3-SUB-CTA-CONT
+H48131     END-EXEC
+H48131  ELSE IF (D3-SUB-CTA-CONT = '2103  ' OR '2105  ' OR '210140')
+H48131     AND D3-ACT-STAT <> '01' THEN
+H48131     EXEC SQL
+H48131     UPDATE BOD3 SET STATUS_REG = '01' WHERE
+H48131     ID_NUMBER =:D3-ID-NUMBER AND
+H48131     ACCT_NO =:D3-ACCT-NO
+H48131     AND SUB_CTA_CONT =:D3-SUB-CTA-CONT
+H48131     END-EXEC
+H48131     ELSE IF (D3-SUB-CTA-CONT = '2101  ' OR '2303  ')
+H48131     THEN
+H48131     EXEC SQL
+H48131     UPDATE BOD3 SET ACT_STAT = '04' WHERE
+H48131     ID_NUMBER =:D3-ID-NUMBER AND
+H48131     ACCT_NO =:D3-ACCT-NO
+H48131     AND SUB_CTA_CONT =:D3-SUB-CTA-CONT
+H48131     END-EXEC
+H48131     END-IF
+H48131  END-IF.
+        NOT-FOUND-EXIT.
+            EXIT.
+
+       READ-CURSOR-D3-ESTRUCT.
+           EXEC SQL
+           FETCH D3_ESTRUCT
+                 INTO :D5-ID-NUMBER,        
+                       D5-SUB-CTA-CONT,   
+                       D5-ACCOUNT-NO     
+           END-EXEC.
+
+           DISPLAY 'SQLCODE READ-CURSOR-D3-ESTRUCT:' 
+                    SQLCODE '*' D5-ACCOUNT-NO '*'
+
+           IF SQLCODE NOT = 0
+              IF SQLCODE = 1403
+                 MOVE 'Y' TO WA-DATA-END24
+                             WA-CLOSE-LOOP24
+              ELSE
+                DISPLAY 'ERROR IN CURSOR-D2-ESTRUCT FECHT: ' SQLCODE
+                PERFORM ERROR-PARA
+              END-IF
+                
+           ELSE
+              EXEC SQL
+              DELETE FROM BOD3 
+                    WHERE  SOC_NO    = '003'
+                      AND  ID_NUMBER =:D5-ID-NUMBER                     
+                      AND  SUB_CTA_CONT =:D5-SUB-CTA-CONT
+                      AND  ACCT_NO   =:D5-ACCOUNT-NO
+                      AND  TRAN_DATE BETWEEN :WA-STRT-OF-MONTH
+                      AND :WA-END-OF-MONTH
+              END-EXEC
+              DISPLAY 'SQLCODE DELETE:' 
+                    SQLCODE '*' D5-ACCOUNT-NO '*'              
+              IF SQLCODE = 0 OR 1403
+                 ADD 1 TO WA-COUNT-DEL-2
+              ELSE
+                DISPLAY "IN8004() PROBLEM IN DELETE BEFORE: " 
+                         SQLCODE '*' D5-ACCOUNT-NO '*' D5-ID-NUMBER '*'
+               END-IF
+          END-IF.
+          
+       D3-ESTRUCT-EXIT.
+       EXIT.
+H48131 VALIDATION-DATE.
+      * MFLAGS DATE
+           MOVE 1            TO UT1999CA-CALL-CODE
+           CALL "UT1999" USING  UT1999CA-CALL-AREA
+           MOVE UT1999CA-CC  TO UT0030-DATE-CC
+           MOVE UT1999CA-YY  TO UT0030-DATE-YY
+           MOVE UT1999CA-MM  TO UT0030-DATE-MM
+           MOVE UT1999CA-DD  TO UT0030-DATE-DD
+        EVALUATE UT0030-DATE-MM 
+           WHEN '01'
+                 MOVE '12' TO UT0030-DATE-MM
+           WHEN '02'
+                 MOVE '01' TO UT0030-DATE-MM
+           WHEN '03'
+                 MOVE '02' TO UT0030-DATE-MM 
+           WHEN '04'
+                 MOVE '03' TO UT0030-DATE-MM
+           WHEN '05'
+                 MOVE '04' TO UT0030-DATE-MM
+           WHEN '06'
+                 MOVE '05' TO UT0030-DATE-MM
+           WHEN '07'
+                 MOVE '06' TO UT0030-DATE-MM
+           WHEN '08'
+                 MOVE '07' TO UT0030-DATE-MM
+           WHEN '09'
+                 MOVE '08' TO UT0030-DATE-MM
+           WHEN '10'
+                 MOVE '09' TO UT0030-DATE-MM
+           WHEN '11'
+                 MOVE '10' TO UT0030-DATE-MM
+           WHEN '12'
+                 MOVE '11' TO UT0030-DATE-MM
+        END-EVALUATE.        
+           MOVE UT0030-DATE-MM TO WA-TODAY-BINARY-DATE.
+H48131 EXIT-DATE.
+            EXIT.
+       CONV-DATE-GREG.
+              MOVE 1                 TO UT0020-FUNCTION
+              CALL "UT0020" USING
+                               UT0020-FUNCTION
+                               UT0020-DATE-AREA
+                               UT0020-BINARY-DATE.
+H48131 CONV-DATE-GREG-EXIT.
+           EXIT.
+        ERROR-PARA.
+           SET UT8500CA-NORMAL-DISPLAY TO TRUE.
+           MOVE SPACES                 TO UT8500CA-INPUT-MSG.
+           STRING "IN8005 : ERROR READING DATABASE"
+                   DELIMITED BY SIZE INTO UT8500CA-INPUT-MSG.
+           CALL "UT8500" USING UT8500CA-AREA.
+           CALL "ABORT".
+        ERROR-PARA-END.
+	           EXIT.
+
+H48131  PROG-COMMIT.
+H48131      MOVE 25 TO DBIO-CALL-FUNC.
+H48131      CALL "DBIO" USING DBIO-CALL-PARAM
+H48131                        DBIO-CALL-SYS-AREA
+H48131                        DBIO-CALL-KEY-AREA
+H48131                        DBIO-CALL-STATUS.
+H48131  COMMIT-EXIT.
+               EXIT.
+
+
+
