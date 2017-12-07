@@ -1,0 +1,538 @@
+10
+   /*********************************************
+  NUMERO DE ODT: 1176032
+  LIBRARIAN: 8757
+  CREADO POR: John Calderon
+  OBJETIVO PRINCIPAL :Se modifican archivos que transmite el gaf para reportar las identificaciones con formato SIB
+  y para identificar inconsistencias en el proceso - AT12
+  **************************************************/
+
+
+  PROCEDURE prc_clientes(pCodigo_empresa        number,
+                       pNumero_identificacion varchar2,
+                       pCod_cliente           out varchar2,
+                       pCodigo_cliente        out number,
+                       pTip_relacion          out varchar2,
+                       pCodigoSuper              out varchar2,
+                       pCodigoActividadEconomica out number,
+                       pTipoVinculacion          out varchar2,
+                       pResultado             out boolean);
+
+
+  PROCEDURE grabar_error(pFec_proce   date,
+                         pCod_empresa number,
+                         pNro_opera   number,
+                         pNom_tab     varchar2,
+                         pDesc_error  varchar2,
+                         pTipo_error  varchar2);
+  PROCEDURE pu_up_provision (pFecha date,pMensaje in out varchar2);
+
+  PROCEDURE carga_AT12(
+       pFecha     in     date,
+       v_veces    out    number,
+       v_ing      out    number,
+       v_ok       out    varchar2,
+       pMensaje   in out varchar2);
+
+
+end pkg_sp_proceso_gafatm;
+-----------------------------
+
+CREATE OR REPLACE PACKAGE BODY pkg_sp_proceso_gafatm is
+
+  PROCEDURE prc_clientes(pCodigo_empresa        number,
+                       pNumero_identificacion varchar2,
+                       pCod_cliente           out varchar2,
+                       pCodigo_cliente        out number,
+                       pTip_relacion          out varchar2,
+                       pCodigoSuper              out varchar2,
+                       pCodigoActividadEconomica out number,
+                       pTipoVinculacion          out varchar2,
+                       pResultado             out boolean)
+  IS
+  BEGIN
+    pResultado:=true;
+    pCod_cliente:=null;
+    pCodigo_cliente:=null;
+    pTip_relacion:=null;
+    pCodigoSuper:=null;
+    pCodigoActividadEconomica:=null;
+    pTipoVinculacion:=null;
+    select cod_cliente,codigo_cliente,decode(TIPO_DE_PERSONA,'N','P101','J','P201'),
+           codigo_super,codigo_actividad_economica,tipo_vinculacion
+     into  pCod_cliente,pCodigo_cliente,pTip_relacion,
+           pCodigoSuper,pCodigoActividadEconomica,pTipoVinculacion
+     from clientes
+     where codigo_empresa=pCodigo_empresa
+      and numero_identificacion=pNumero_identificacion;
+  EXCEPTION
+   WHEN OTHERS  THEN
+    pResultado:=false;
+  END prc_clientes;
+
+  PROCEDURE grabar_error(pFec_proce   date,
+                         pCod_empresa number,
+                         pNro_opera   number,
+                         pNom_tab     varchar2,
+                         pDesc_error  varchar2,
+                         pTipo_error  varchar2) IS
+  BEGIN
+      INSERT INTO PRES_ERROR
+      (Fec_proce,Cod_empresa,Nro_opera,Nom_tab,
+       Desc_error,Tipo_error,Fec_carga)
+      VALUES
+      (pFec_proce,pCod_empresa,pNro_opera,pNom_tab,
+      pDesc_error,pTipo_error,sysdate
+      );
+  EXCEPTION
+  when others then
+        raise_application_error(-20005,'Error proceso:'||sqlerrm);
+  END;
+
+
+PROCEDURE pu_up_provision (pFecha date,pMensaje in out varchar2) IS
+  cursor cProv is
+    select * from sp_atmcredito
+    where fecha=pFecha;
+  lnProvision  number;
+  lnProvision_NIIF number; -- jf oct 2014
+  lnProvision_complementaria number; --jf oct 2014
+---  pmensaje varchar2(2000);
+  lnReg   number;
+  lsCalificacion varchar2(1);
+  lnRegistro number:=0;
+  CONTROLPROVSION EXCEPTION;
+
+BEGIN
+  --El proceso actualiza la provisión generada por el área operativa.
+   IF pkg_sp_generales.fun_control_prc (pFecha,'PROVAT03') THEN
+     select count(*) into lnReg
+     from sp_atmcredito
+     where fecha=pFecha;
+     IF lnReg >0 THEN
+       --Verifico si existe la provisión cargada
+       IF  pkg_sp_generales.fun_control_prc (pFecha,'PROVI') THEN
+        -- al_id := find_alert('ALER_USR');
+         --set_alert_property(al_id,alert_message_text,
+         pMensaje := 'NO EXISTE PROVISION GENERADA PARA ACTUALIZAR EL AT03. REVISE...!';
+         --al_button:= show_alert(al_id);
+         RAISE CONTROLPROVSION;
+       END IF;
+       --Actualiza Provisión
+
+       FOR rg in cProv LOOP
+       	 lnRegistro := lnRegistro+1;
+         --lnProvision := pkg_sp_generales.fun_prov_credito(rg.credito,pFecha,lsCalificacion );
+       --procedimiento que carga las provisiones done by john Calderon Nov 2014
+       pkg_sp_generales.fun_prov_credito(rg.credito,
+                            pFecha, 
+                            lnProvision, 
+                            lsCalificacion,
+                            lnProvision_NIIF, --jc oct 2014
+                            lnProvision_complementaria); -- jc oct 2014         
+         update sp_atmcredito set provision=lnProvision,
+         clas_pres=decode(lsCalificacion,'A','01','B','02','C','03','D','04','E','05','F','06'),
+         Provision_NIIF = lnProvision_NIIF,
+         Provision_complementaria = lnProvision_complementaria
+         where credito=rg.credito
+           and fecha=pFecha;
+         if lnRegistro=100 then
+         	 lnRegistro:=0;
+           commit;
+         end if;
+       END LOOP;
+       commit;
+       -- fin john calderon
+       --clear_message;
+       ---al_id := find_alert('ALER_USR');
+       pMensaje:='CARGA DE PROVISION EXITOSA...';
+---       al_button:= show_alert(al_id);
+       pkg_sp_generales.prc_contol_proc (pFecha,'PROVAT03','PROVISION EJECUTADA CORRECTAMENTE','E');
+     ELSE
+       --al_id := find_alert('ALER_USR');
+       --set_alert_property(al_id,alert_message_text,
+       pMensaje:='INFORMACION DEL AT03 NO ESTA GENERADA AL:'||TO_CHAR(pFecha,'yyyy/mm/dd')||' NO PUEDE APLICAR LAS PROVISIONES';
+       --al_button:= show_alert(al_id);
+     END IF;
+   ELSE
+     ---al_id := find_alert('ALER_USR');
+     --set_alert_property(al_id,alert_message_text,
+     pMensaje:= 'CARGA DE PROVISION EJECUTADA A LA FECHA: '||to_char(pFecha,'yyyy/mm/dd');
+     ---al_button:= show_alert(al_id);
+   END IF;
+
+Exception
+  WHEn CONTROLPROVSION then
+   raise_application_error(-20005,pMensaje);
+ when others then
+   pkg_sp_generales.prc_contol_proc (pFecha,'PROVAT03','GARGA FALLIDA','F');
+  --- al_id := find_alert('ALER_USR');
+   --set_alert_property(al_id,alert_message_text,'CARGA ERRADA, Comunicar inmediatamente a Sistemas...!');
+ ---  al_button:= show_alert(al_id);
+   raise_application_error(-20005,'CARGA ERRADA, Comunicar inmediatamente a Sistemas...!');
+END;
+--
+--
+
+
+PROCEDURE carga_AT12(
+
+       pFecha     in     date,
+       v_veces    out    number,
+       v_ing      out    number,
+       v_ok       out    varchar2,
+       pMensaje   in out varchar2)
+IS
+
+
+/*
+   odt: 875350
+   Autor: Edison Zumarraga
+   Requerimiento: Atómo 12 de garantía.
+*/
+
+
+
+
+  v_arc              UTL_FILE.FILE_TYPE;
+  v_Fecha             DATE;
+  v_CodBanco          varchar2(3);
+  v_IdDeudor          varchar2(60);
+  v_IdFideic          varchar2(30);
+  v_NomFiduciaria     varchar2(3);
+  v_Origen            varchar2(1);
+  v_Tipo              varchar2(4);
+  v_IdDocumento       varchar2(30);
+  v_NomOrganismo      VARCHAR2(60);
+  v_ValorInicial      varchar2(18);
+  v_valor             varchar2(18);
+  v_TipoInstFin       varchar2(2);
+  v_CaliEmisor        varchar(2);
+  v_CaliEmision       varchar(2);
+  v_PaisEmision       varchar(3);
+  v_FechaActual       DATE;
+  v_FechaVto          DATE;
+  v_Indet_deud_GAF	  varchar2(30); 	-- NEW -  ODT: 1176032 - Dario Espinosa - 27/Enero/2010
+  v_Indet_Fidei_GAF	  varchar2(30); 	-- NEW -  ODT: 1176032 - Dario Espinosa - 27/Enero/2010
+  
+  v_Identificacion    varchar2(30); -- campo que viene en el archivo de entrada pero no es generado nov 2014 john calderon
+  v_codigo_cliente    varchar2(10); -- campo que viene en el archivo de entrada pero no es generado John Calderon
+  v_Numero_Prestamo   varchar2(10);   -- john calderon NOV 2014
+  v_Tipo_Facilidad_Crediticia varchar2(2); --john calderon NOV 2014
+  v_Valor_Ponderado_Garantia varchar2(18); -- john calderon NOV 2014
+----
+   lsTermino          VARCHAR2(1):=NULL;
+   v_num_reg          number(5);
+   v_reg_ins          number(5);
+   v_borrar           varchar2(1);
+   lnRegistro         number;
+
+   exTermina          exception;
+   v_linea            varchar2(5000);
+   lsDirectorio       varchar2(100):='FILES_DIR';
+   LSMENSPROC         VARCHAR2(200):=NULL;
+   v_FechaArchivo     varchar2(10);
+   v_NombArchivo      varchar2(100);
+
+   lnLongCad    number;
+   lnIni        number:=1;
+   lnfin        number:=0;
+   v_separador  varchar2(1) := '~';
+   v_ValorInicialN     number(18,2);
+   v_valorN             number(18,2);
+   v_Valor_Ponderado_GarantiaN number(18,2);-- john calderon NOV 2014
+   
+
+
+  --
+   begin
+      v_num_reg := 0;
+      v_reg_ins := 0;
+      v_borrar:='N';
+      lnRegistro := 0;
+      v_veces := 0;
+      v_ing := 0;
+      v_FechaArchivo := to_char(pfecha,'yyyymmdd');
+      --------------------------------------------
+      -- Apertura de Archivo de Recepción de Datos
+      --------------------------------------------
+      v_NombArchivo   := 'GAFATM12.TXT';
+      v_arc := UTL_FILE.FOPEN(lsDirectorio, v_NombArchivo, 'r','32767');
+
+    loop
+        utl_file.get_line(v_arc,v_linea);
+       Begin
+        lnRegistro := lnRegistro+1;
+        v_veces := v_veces + 1;
+        v_ing := v_ing + 1;
+        lnLongCad:= LENGTH(v_linea);
+         -------------------------------------
+         -- Recupero Datos de Archivo Recibido
+         -------------------------------------
+          lnFin:=instr(substr(v_linea,lnIni,lnLongCad),v_separador)-1;
+          v_Fecha := TO_DATE(TRIM(substr(v_linea,lnIni,lnFin)),'yyyymmdd');
+        if pFECHA <> v_fecha then
+            raise exTermina;
+          else
+            if v_borrar='N' then
+               delete from B2000.TSP_GARANTIAS where fecha=pFECHA;
+               v_borrar:='S';
+               commit;
+
+            end if;
+         end if;
+
+          lnIni:=lnIni+lnFin+1;
+          lnFin:=instr(substr(v_linea,lnIni,lnLongCad),v_separador)-1;
+          v_CodBanco := TRIM(substr(v_linea,lnIni,lnFin));
+
+          lnIni:=lnIni+lnFin+1;
+          lnFin:=instr(substr(v_linea,lnIni,lnLongCad),v_separador)-1;
+		  --v_IdDeudor :=TRIM(substr(v_linea,lnIni,lnFin));		  -- OLD -  ODT: 1176032 - Dario Espinosa - 27/Enero/2010
+          v_Indet_deud_GAF := TRIM(substr(v_linea,lnIni,lnFin)); -- NEW -  ODT: 1176032 - Dario Espinosa - 27/Enero/2010
+
+          lnIni:=lnIni+lnFin+1;
+          lnFin:=instr(substr(v_linea,lnIni,lnLongCad),v_separador)-1;
+		  --v_IdFideic :=TRIM(substr(v_linea,lnIni,lnFin));			-- OLD -  ODT: 1176032 - Dario Espinosa - 27/Enero/2010
+		  v_Indet_Fidei_GAF := TRIM(substr(v_linea,lnIni,lnFin)); -- NEW -  ODT: 1176032 - Dario Espinosa - 27/Enero/2010
+		  -- INICIO NEW -  ODT: 1176032 - Dario Espinosa - 27/Enero/2010
+		  begin
+			  select num_id_sib into v_IdDeudor
+			  from id_personas
+			  where replace(num_id,'-') = replace(v_Indet_deud_GAF,'-')
+        and rownum = 1;
+		  exception
+			  when no_data_found then
+				v_IdDeudor := v_Indet_deud_GAF;
+		  end;
+
+		  begin
+			  select num_id_sib into v_IdFideic
+			  from id_personas
+			  where replace(num_id,'-') = replace( v_Indet_Fidei_GAF,'-')
+        and rownum = 1;
+        exception
+  			  when no_data_found then
+  				v_IdFideic := v_Indet_Fidei_GAF;
+		  end;
+		  -- FIN NEW -  ODT: 1176032 - Dario Espinosa - 27/Enero/2010
+
+          lnIni:=lnIni+lnFin+1;
+          lnFin:=instr(substr(v_linea,lnIni,lnLongCad),v_separador)-1;
+          v_NomFiduciaria :=TRIM(substr(v_linea,lnIni,lnFin));
+
+          lnIni:=lnIni+lnFin+1;
+          lnFin:=instr(substr(v_linea,lnIni,lnLongCad),v_separador)-1;
+          v_Origen :=TRIM(substr(v_linea,lnIni,lnFin));
+
+          lnIni:=lnIni+lnFin+1;
+          lnFin:=instr(substr(v_linea,lnIni,lnLongCad),v_separador)-1;
+          v_Tipo :=TRIM(substr(v_linea,lnIni,lnFin));
+
+          lnIni:=lnIni+lnFin+1;
+          lnFin:=instr(substr(v_linea,lnIni,lnLongCad),v_separador)-1;
+          v_IdDocumento :=TRIM(substr(v_linea,lnIni,lnFin));
+
+          lnIni:=lnIni+lnFin+1;
+          lnFin:=instr(substr(v_linea,lnIni,lnLongCad),v_separador)-1;
+          v_NomOrganismo :=TRIM(substr(v_linea,lnIni,lnFin));
+
+          lnIni:=lnIni+lnFin+1;
+          lnFin:=instr(substr(v_linea,lnIni,lnLongCad),v_separador)-1;
+          v_ValorInicial := trim(substr(v_linea,lnIni,lnFin));
+          v_ValorInicialN := to_number(v_ValorInicial,'9999999999.99');
+
+
+          lnIni:=lnIni+lnFin+1;
+          lnFin:=instr(substr(v_linea,lnIni,lnLongCad),v_separador)-1;
+        --  v_valor := TO_NUMBER(TRIM(substr(v_linea,lnIni,lnFin)));
+          v_valor := TRIM(substr(v_linea,lnIni,lnFin));
+          v_valorN := to_number(v_valor,'9999999999.99');
+
+          lnIni:=lnIni+lnFin+1;
+          lnFin:=instr(substr(v_linea,lnIni,lnLongCad),v_separador)-1;
+          v_TipoInstFin := TRIM(substr(v_linea,lnIni,lnFin));
+
+          lnIni:=lnIni+lnFin+1;
+          lnFin:=instr(substr(v_linea,lnIni,lnLongCad),v_separador)-1;
+          v_CaliEmisor := TRIM(substr(v_linea,lnIni,lnFin));
+
+          lnIni:=lnIni+lnFin+1;
+          lnFin:=instr(substr(v_linea,lnIni,lnLongCad),v_separador)-1;
+          v_CaliEmision := TRIM(substr(v_linea,lnIni,lnFin));
+
+          lnIni:=lnIni+lnFin+1;
+          lnFin:=instr(substr(v_linea,lnIni,lnLongCad),v_separador)-1;
+          v_PaisEmision := TRIM(substr(v_linea,lnIni,lnFin));
+
+          lnIni:=lnIni+lnFin+1;
+          lnFin:=instr(substr(v_linea,lnIni,lnLongCad),v_separador)-1;
+          v_FechaActual := to_date(TRIM(substr(v_linea,lnIni,lnFin)),'yyyymmdd');
+
+          lnIni:=lnIni+lnFin+1;
+
+          lnFin:= instr(substr(v_linea,lnIni,lnLongCad),v_separador)-1;
+          v_FechaVto := to_date(TRIM(substr(v_linea,lnIni,lnFin)),'yyyymmdd');
+          --add two fields that come into the input file "archivo de entrada"
+          lnIni:=lnIni+lnFin+1;
+          lnFin:=instr(substr(v_linea,lnIni,lnLongCad),v_separador)-1;
+          v_Identificacion :=TRIM(substr(v_linea,lnIni,lnFin));  
+          
+          lnIni:=lnIni+lnFin+1;
+          lnFin:=instr(substr(v_linea,lnIni,lnLongCad),v_separador)-1;
+          v_codigo_cliente :=TRIM(substr(v_linea,lnIni,lnFin));  
+          
+          
+---------------------------------INICIO john calderon NOV 2014
+          lnIni:=lnIni+lnFin+1;
+          lnFin:=instr(substr(v_linea,lnIni,lnLongCad),v_separador)-1;
+          v_Numero_Prestamo := TRIM(substr(v_linea,lnIni,lnFin));
+          
+          
+          lnIni:=lnIni+lnFin+1;
+          lnFin:=instr(substr(v_linea,lnIni,lnLongCad),v_separador)-1;
+          v_Tipo_Facilidad_Crediticia := TRIM(substr(v_linea,lnIni,lnFin));
+          
+          --lnIni:=lnIni+lnFin+1;
+          --lnFin:=instr(substr(v_linea,lnIni,lnLongCad),v_separador)-1;
+          --v_Valor_Ponderado_Garantia := trim(substr(v_linea,lnIni,lnFin));
+          v_Valor_Ponderado_Garantia  := substr(substr(v_linea, 289,18),1,18); 
+          v_Valor_Ponderado_GarantiaN := to_number(v_Valor_Ponderado_Garantia,'9999999999.99');
+          
+------------------------------- FIN -- john calderon NOV 2014
+                
+
+         ------------------------------------
+         -- Actualizo número de Líneas Leidas
+         ------------------------------------
+         v_num_reg := v_num_reg + 1;
+
+         ---------------------------------------------------
+         -- Graba en la tabla de Inversiones
+         ---------------------------------------------------
+         INSERT INTO B2000.TSP_GARANTIAS(
+                           FECHA ,
+                           CODIGO_BANCO ,
+                           IDENTIFICACION_DEUDOR ,
+                           IDENTIFICACION_FIDEICOMISO ,
+                           NOMBRE_FIDUCIARIA ,
+                           ORIGEN ,
+                           TIPO   ,
+                           IDENTIFICACION_DOCUMENTO ,
+                           NOMBRE_ORGANISMO ,
+                           VALOR_INICIAL    ,
+                           VALOR ,
+                           TIPO_INSTRUMENTO_FINANCIERO,
+                           CALIFICACION_EMISOR,
+                           CALIFICACION_EMISION,
+                           PAIS_EMISION ,
+                           FECHA_ACTUALIZACION ,
+                           FECHA_VENCIMIENTO,
+						   Indet_deud_GAF, --  NEW -  ODT: 1176032 - Dario Espinosa - 27/Enero/2010
+						   Indet_Fidei_GAF,  --  NEW -  ODT: 1176032 - Dario Espinosa - 27/Enero/2010
+               
+               NUMERO_DE_PRESTAMO,-- john calderon NOV 2014
+               TIPO_FACILIDAD_CREDITICIA,-- john calderon NOV 2014
+               VALOR_PONDERADO_GARANTIA-- john calderon NOV 2014
+						   )values
+                         ( v_Fecha,
+                           v_CodBanco ,
+                           v_IdDeudor ,
+                           v_IdFideic ,
+                           v_NomFiduciaria ,
+                           v_Origen ,
+                           v_Tipo   ,
+                           v_IdDocumento ,
+                           v_NomOrganismo ,
+                           v_ValorInicialN ,
+                           v_valorN ,
+                           v_TipoInstFin ,
+                           v_CaliEmisor ,
+                           v_CaliEmision ,
+                           v_PaisEmision ,
+                           v_FechaActual,
+                           v_FechaVto,
+						   v_Indet_deud_GAF, --  NEW -  ODT: 1176032 - Dario Espinosa - 27/Enero/2010
+						   v_Indet_Fidei_GAF,  --  NEW -  ODT: 1176032 - Dario Espinosa - 27/Enero/2010
+               
+               v_Numero_Prestamo, -- john calderon NOV 2014
+               v_Tipo_Facilidad_Crediticia, -- john calderon NOV 2014
+               v_Valor_Ponderado_GarantiaN -- john calderon NOV 2014
+						   );
+
+
+       lsTermino:='S';
+       ----------------------------------------
+       -- Actualizo número de Líneas Insertadas
+       ----------------------------------------
+       v_reg_ins := v_reg_ins + 1;
+       lnIni  :=1;
+       lnfin  :=0;
+
+       exception
+       when DUP_VAL_ON_INDEX then
+         pMensaje := 'Registro ó archivo ya fue cargado anteriormente.. ';
+lnRegistro := null;
+v_ing := null;
+v_ok := null;
+       end;
+
+
+     end loop;
+
+     commit;
+      UTL_FILE.FCLOSE(v_arc);
+      pMensaje := 'Termino Bien. Reg:'|| to_char(v_veces);
+      v_ok := 'OK';
+
+   exception
+   when exTermina then
+      pMensaje := 'Fecha de proceso no coincide con la fecha de datos del archivo GAFATM03.TXT!! ';
+      UTL_FILE.FCLOSE(v_arc);
+      lnRegistro := null;
+      v_ing := null;
+      v_ok := null;
+      raise_application_error(-20005,'Error en proceso fecha iconsistente');
+
+   when no_data_found then
+
+      IF lsTermino='S' THEN
+         pkg_k_tabformulaPan.prc_control (pFECHA,'AT12GAR','SE HA PROCESADO EXITOSAMENTE','E',LSMENSPROC);
+         IF LSMENSPROC IS NOT NULL THEN
+            pMensaje := 'No inserto en control de procesos';
+         END IF;
+       ELSE
+         pkg_k_tabformulaPan.prc_control(pFECHA,'AT12GAR','NO EXISTEN DATOS..NO EJECUTO EL PROCESO','F',LSMENSPROC);
+      END IF;
+      commit;
+      UTL_FILE.FCLOSE(v_arc);
+      pMensaje := pMensaje ||'Termino Bien. Reg:'|| to_char(v_reg_ins);
+
+    if lsTermino='S' then
+         pMensaje := pMensaje ||'OK Carga de Información para Atomos de Garantías ' ||
+                     'OK-'||to_char(pFECHA,'yyyy-mm-dd');
+      end if;
+      v_ok := 'OK';
+
+--      raise_application_error(-20005,'Error '||sqlerrm);
+   WHEN UTL_FILE.INVALID_PATH THEN
+       raise_application_error(-20002,'Error en : Path no valido'||SQLERRM);
+   WHEN UTL_FILE.INVALID_OPERATION THEN
+       raise_application_error(-20003,'Error en : El modo open no válido'||SQLERRM);
+   WHEN UTL_FILE.INTERNAL_ERROR THEN
+       raise_application_error(-20004,'Error en : Error no especificado'||SQLERRM);
+   when others then
+      pMensaje := 'Error:'||substr(sqlerrm,1,160);
+      pkg_k_tabformulaPan.prc_control(pFECHA,'AT12GAR','HA FALLADO EL PROCESO','F',LSMENSPROC);
+      commit;
+      pMensaje := 'When Others Generar_Archivo '|| sqlerrm;
+      UTL_FILE.FCLOSE(v_arc);
+lnRegistro := null;
+v_ing := null;
+v_ok := null;
+
+END;
+
+end pkg_sp_proceso_gafatm;
+
+
